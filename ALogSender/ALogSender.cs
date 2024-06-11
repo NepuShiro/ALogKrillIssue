@@ -23,7 +23,7 @@ namespace ALogSender
         {
             Msg("-------------------- OnEngineInit --------------------");
 
-            Thread pipeServerThread = new Thread(StartPipeServer);
+            Thread pipeServerThread = new(StartPipeServer);
             pipeServerThread.Start();
 
             while (writer == null)
@@ -62,8 +62,9 @@ namespace ALogSender
             {
                 if (writer != null && pipeServer.IsConnected)
                 {
+                    writer.AutoFlush = true;
                     writer.WriteLine(message);
-                    writer.Flush();
+                    //writer.Flush();
                 }
             }
             catch (Exception ex)
