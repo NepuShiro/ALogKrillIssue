@@ -1,4 +1,8 @@
-# ALogSkillIssue
+# ALogKrillIssue
+
+#### This Mod is very iffy, so don't rely on it too much
+
+##### It has some issues with logs getting cut off or not sent at all
 
 A [ResoniteModLoader](https://github.com/resonite-modding-group/ResoniteModLoader) mod for [Resonite](https://resonite.com/) that exists to send logs to a seperate Console Window.
 
