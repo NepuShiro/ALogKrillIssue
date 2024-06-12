@@ -1,53 +1,60 @@
-﻿using System;
-using System.IO;
-using System.IO.Pipes;
+﻿using System.IO.Pipes;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading;
 
 namespace LogViewer
 {
-	public class LogViewer
-	{
-		private static readonly string pipeName = "LogPipe"; // Name of the named pipe
+    public class LogViewer
+    {
+        private static readonly string pipeName = "LogPipe";
+        private static bool stopping = false;
 
-		static void Main()
-		{
-			Console.WriteLine("LogViewer started. Press Enter to exit...");
+        static void Main()
+        {
+            Console.WriteLine("LogViewer started. Press Any Key to exit...");
 
-			Thread pipeClientThread = new(ReadFromPipe);
-			pipeClientThread.Start();
+            Task.Run(() => ReadFromPipeAsync());
 
-			Console.Read();
+            Console.ReadLine();
+            stopping = true;
+        }
 
-			pipeClientThread.Join();
-		}
+        private static async Task ReadFromPipeAsync()
+        {
+            while (!stopping)
+            {
+                try
+                {
+                    using NamedPipeClientStream pipeClient = new(".", pipeName, PipeDirection.In, PipeOptions.Asynchronous);
+                    Console.WriteLine("Attempting to connect to named pipe server...");
+                    await pipeClient.ConnectAsync(1000);
+                    Console.WriteLine("Connected to named pipe server.");
 
-		private static void ReadFromPipe()
-		{
-			try
-			{
-				using NamedPipeClientStream pipeClient = new(".", pipeName, PipeDirection.In);
-				Console.WriteLine("Attempting to connect to named pipe server...");
-				pipeClient.Connect();
-				Console.WriteLine("Connected to named pipe server.");
+                    using StreamReader reader = new(pipeClient, Encoding.UTF8);
+                    while (!stopping)
+                    {
+                        string? response = await reader.ReadLineAsync();
+                        if (response == null)
+                            break;
 
-				using StreamReader reader = new(pipeClient, Encoding.UTF8);
-				while (true)
-				{
-					string? response = reader.ReadLine();
-					if (response == null)
-						break;
+                        OnLogMessage(response);
+                    }
+                }
+                catch (TimeoutException)
+                {
+                    // Console.WriteLine("Connection to named pipe server timed out. Retrying...");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error in named pipe client: {ex.Message}");
+                }
 
-					OnLogMessage(response);
-				}
-			}
-			catch (Exception ex)
-			{
-				Console.WriteLine($"Error in named pipe client: {ex.Message}");
-			}
-		}
-
+                if (!stopping)
+                {
+                    await Task.Delay(1000);
+                }
+            }
+        }
 
 		private static void OnLogMessage(string message)
 		{

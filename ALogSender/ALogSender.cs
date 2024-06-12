@@ -2,75 +2,89 @@
 using System.IO;
 using System.IO.Pipes;
 using System.Text;
-using System.Threading;
+using System.Threading.Tasks;
 using ResoniteModLoader;
 using Elements.Core;
 
 namespace ALogSender
 {
-    public class ALogSender : ResoniteMod
-    {
-        public override string Name => "ALogSender";
-        public override string Author => "NepuShiro";
-        public override string Version => "1.0.0";
-        public override string Link => "https://github.com/NepuShiro/ALogSender";
+	public class ALogSender : ResoniteMod
+	{
+		public override string Name => "ALogSender";
+		public override string Author => "NepuShiro";
+		public override string Version => "1.0.5";
+		public override string Link => "https://github.com/NepuShiro/ALogKrillIssue";
 
-        private static readonly string pipeName = "LogPipe";
-        private static NamedPipeServerStream pipeServer;
-        private static StreamWriter writer;
+		private static readonly string pipeName = "LogPipe";
+		private static NamedPipeServerStream pipeServer;
+		private static StreamWriter writer;
+		private static bool isRunning = true;
 
-        public override void OnEngineInit()
-        {
-            Msg("-------------------- OnEngineInit --------------------");
+		public override void OnEngineInit()
+		{
+			Msg("-------------------- OnEngineInit --------------------");
 
-            Thread pipeServerThread = new(StartPipeServer);
-            pipeServerThread.Start();
+			Task.Run(() => StartPipeServer());
+		}
 
-            while (writer == null)
-            {
-                Thread.Sleep(100);
-            }
+		private static void StartPipeServer()
+		{
+			try
+			{
+				while (isRunning)
+				{
+					pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.Out);
 
-            UniLog.OnLog += WriteToPipe;
-            UniLog.OnWarning += WriteToPipe;
-            UniLog.OnError += WriteToPipe;
-        }
+					Msg("Named pipe server started. Waiting for client connection...");
 
-        private static void StartPipeServer()
-        {
-            try
-            {
-                pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.Out);
+					pipeServer.WaitForConnection();
 
-                Msg("Named pipe server started. Waiting for client connection...");
+					Msg("Client connected to named pipe.");
 
-                pipeServer.WaitForConnection();
+					UniLog.OnLog += WriteToPipe;
+					UniLog.OnWarning += WriteToPipe;
+					UniLog.OnError += WriteToPipe;
 
-                Msg("Client connected to named pipe.");
+					writer = new StreamWriter(pipeServer, Encoding.UTF8) { AutoFlush = true };
+				}
+			}
+			catch (Exception ex)
+			{
+				Error($"Error in named pipe server: {ex.Message}");
+			}
+		}
 
-                writer = new StreamWriter(pipeServer, Encoding.UTF8);
-            }
-            catch (Exception ex)
-            {
-                Error($"Error in named pipe server: {ex.Message}");
-            }
-        }
+		private static async void WriteToPipe(string message)
+		{
+			try
+			{
+				if (writer != null && pipeServer != null && pipeServer.IsConnected)
+				{
+					writer.WriteLine(message);
+				}
+			}
+			catch (IOException)
+			{
+				isRunning = false;
+				pipeServer.Disconnect();
 
-        private static void WriteToPipe(string message)
-        {
-            try
-            {
-                if (writer != null && pipeServer.IsConnected)
-                {
-                    writer.AutoFlush = true;
-                    writer.WriteLine(message);
-                    //writer.Flush();
-                }
-            }
-            catch (Exception ex)
-            {
-                Error($"Error writing to pipe: {ex.Message}");
-            }
-        }
-    }
+				UniLog.OnLog -= WriteToPipe;
+				UniLog.OnWarning -= WriteToPipe;
+				UniLog.OnError -= WriteToPipe;
+
+				writer.Flush();
+				writer.Dispose();
+				writer.Close();
+				writer = null;
+
+				pipeServer.WaitForPipeDrain();
+				pipeServer.Dispose();
+				pipeServer.Close();
+				pipeServer = null;
+
+				isRunning = true;
+				await Task.Run(() => StartPipeServer());
+			}
+		}
+	}
 }

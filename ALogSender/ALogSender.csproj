@@ -25,6 +25,9 @@
     <Reference Include="Elements.Core">
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Resonite\Resonite_Data\Managed\Elements.Core.dll</HintPath>
     </Reference>
+    <Reference Include="FrooxEngine">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Resonite\Resonite_Data\Managed\FrooxEngine.dll</HintPath>
+    </Reference>
     <Reference Include="ResoniteModLoader">
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Resonite\Libraries\ResoniteModLoader.dll</HintPath>
     </Reference>
