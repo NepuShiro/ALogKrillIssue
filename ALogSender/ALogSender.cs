@@ -12,7 +12,7 @@ namespace ALogSender
 	{
 		public override string Name => "ALogSender";
 		public override string Author => "NepuShiro";
-		public override string Version => "1.0.5";
+		public override string Version => "1.5.0";
 		public override string Link => "https://github.com/NepuShiro/ALogKrillIssue";
 
 		private static readonly string pipeName = "LogPipe";
