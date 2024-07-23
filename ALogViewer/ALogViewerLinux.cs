@@ -1,4 +1,6 @@
 using System.IO.Pipes;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -6,7 +8,6 @@ namespace LogViewer
 {
 	public class LogViewer
 	{
-		private static readonly string pipeName = "LogPipe";
 		private static bool stopping = false;
 		private static ConsoleColor currentColor = ConsoleColor.Gray;
 
@@ -14,45 +15,29 @@ namespace LogViewer
 		{
 			Console.WriteLine("LogViewer started. Press Any Key to exit...");
 
-			Task.Run(() => ReadFromPipeAsync());
+			Task.Run(ReceiveLogsAsync);
 
 			Console.ReadLine();
 			stopping = true;
 		}
 
-		private static async Task ReadFromPipeAsync()
+		private static async Task ReceiveLogsAsync()
 		{
+			UdpClient udpListener = new(9999); // Listen on port 9999
+
 			while (!stopping)
 			{
 				try
 				{
-					using NamedPipeClientStream pipeClient = new(".", pipeName, PipeDirection.In, PipeOptions.Asynchronous);
-					Console.WriteLine("Attempting to connect to named pipe server...");
-					await pipeClient.ConnectAsync(1000);
-					Console.WriteLine("Connected to named pipe server.");
+					UdpReceiveResult result = await udpListener.ReceiveAsync();
+					byte[] receiveBytes = result.Buffer;
+					string receivedMessage = Encoding.UTF8.GetString(receiveBytes);
 
-					using StreamReader reader = new(pipeClient, Encoding.UTF8);
-					while (!stopping)
-					{
-						string? response = await reader.ReadLineAsync();
-						if (response == null)
-							break;
-
-						OnLogMessage(response);
-					}
-				}
-				catch (TimeoutException)
-				{
-					// Console.WriteLine("Connection to named pipe server timed out. Retrying...");
+					OnLogMessage(receivedMessage);
 				}
 				catch (Exception ex)
 				{
-					Console.WriteLine($"Error in named pipe client: {ex.Message}");
-				}
-
-				if (!stopping)
-				{
-					await Task.Delay(1000);
+					Console.WriteLine($"Error receiving log entry: {ex.Message}");
 				}
 			}
 		}
@@ -133,7 +118,7 @@ namespace LogViewer
 
 		private static string RemoveTimestampAndFPS(string message)
 		{
-			string timestampPattern = @"\d{1,2}:\d{1,2}:\d{1,2} [APap][Mm]\.\d{1,3}\s";
+			string timestampPattern = @"\d{1,2}:\d{1,2}:\d{1,2}\.\d{1,3}\s";
 			string fpsPattern = @"\(\s*-*\d+\s?FPS\s?\)\s+";
 
 			message = Regex.Replace(message, timestampPattern, "");

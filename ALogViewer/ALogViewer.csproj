@@ -5,6 +5,15 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
+
+  <ItemGroup Condition="'$(Configuration)' == 'Windows'">
+    <Compile Include="ALogViewer.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Configuration)' == 'Linux'">
+    <Compile Include="ALogViewerLinux.cs" />
+  </ItemGroup>
 
 </Project>
