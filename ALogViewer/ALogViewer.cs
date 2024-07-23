@@ -92,7 +92,7 @@ namespace LogViewer
 
 		private static bool HasTimestampAndFPS(string message)
 		{
-			string pattern = @"^\d{1,2}:\d{1,2}:\d{1,2} [APap][Mm]\.\d{1,3}\s+\(\s*-*\d+\s?FPS\s?\)";
+			string pattern = @"\d{1,2}:\d{1,2}:\d{1,2} [APap][Mm]\.\d{1,3}\s+\(\s*-*\d+\s?FPS\s?\)";
 			return Regex.IsMatch(message, pattern);
 		}
 
