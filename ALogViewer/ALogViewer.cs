@@ -11,30 +11,37 @@ namespace ALogViewer
 		private static ConsoleColor currentColor = ConsoleColor.Gray;
 		private static UdpClient udpClient;
 		private static string lastLogMessage = string.Empty;
-		private static string pattern = @"\d{1,2}:\d{1,2}:\d{1,2}(\s[APap][Mm])?\.\d{1,3}\s+\(\s*-*\d+\s?FPS\s?\)\s";
+		private static readonly string pattern = @"\d{1,2}:\d{1,2}:\d{1,2}(\s[APap][Mm])?\.\d{1,3}\s+\(\s*-*\d+\s?FPS\s?\)\s";
 
 		static void Main(string[] args)
 		{
-			int port = 9999;
 			try
 			{
-				port = args.Length > 0 ? int.Parse(args[0]) : 9999;
+				int port = 9999;
+				try
+				{
+					port = args.Length > 0 ? int.Parse(args[0]) : 9999;
+				}
+				catch (Exception e)
+				{
+					PrintMessage($"Error parsing Port: {e.Message}", ConsoleColor.Red);
+					PrintMessage($"Using default Port: {port}", ConsoleColor.Red);
+					port = 9999;
+				}
+
+				udpClient = new UdpClient();
+				udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+				udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, port));
+
+				Console.Title = "Resonite Console";
+				PrintMessage("LogViewer started. Press Enter to exit...");
+
+				Task.Run(ReceiveLogsAsync);
 			}
 			catch (Exception e)
 			{
-				Console.WriteLine($"Error parsing Port: {e.Message}");
-				Console.WriteLine($"Using default Port: 9999");
-				port = 9999;
+				PrintMessage($"An Error has occured durring Init: {e}", ConsoleColor.Red);
 			}
-
-			udpClient = new UdpClient();
-			udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-			udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, port));
-
-			Console.Title = "Resonite Console";
-			Console.WriteLine("LogViewer started. Press Enter to exit...");
-
-			Task.Run(ReceiveLogsAsync);
 
 			Console.ReadLine();
 			stopping = true;
@@ -63,7 +70,7 @@ namespace ALogViewer
 					string disconnectMessage = "Disconnected from server. Attempting to reconnect...";
 					if (lastLogMessage != disconnectMessage)
 					{
-						Console.WriteLine(disconnectMessage);
+						PrintMessage(disconnectMessage, ConsoleColor.Red);
 						lastLogMessage = disconnectMessage;
 					}
 					await Task.Delay(1000);
@@ -74,7 +81,7 @@ namespace ALogViewer
 				}
 				catch (Exception ex)
 				{
-					Console.WriteLine($"Error receiving log entry: {ex.Message}");
+					PrintMessage($"Error receiving log entry: {ex.Message}", ConsoleColor.Red);
 				}
 			}
 		}
@@ -105,17 +112,13 @@ namespace ALogViewer
 					}
 					else if (IsValidLog(cleanedMessage))
 					{
-						Console.ForegroundColor = ConsoleColor.Gray;
-						Console.WriteLine($"{cleanedMessage}");
-						Console.ResetColor();
+						PrintMessage(cleanedMessage);
 					}
 				}
 				else
 				{
 					// This is a continuation of the previous message
-					Console.ForegroundColor = currentColor;
-					Console.WriteLine($"{cleanedMessage}");
-					Console.ResetColor();
+					PrintMessage(cleanedMessage, currentColor);
 				}
 			}
 		}
@@ -136,9 +139,7 @@ namespace ALogViewer
 							   ConsoleColor.Gray;
 
 			currentColor = consoleColor;
-			Console.ForegroundColor = consoleColor;
-			Console.WriteLine($"{message}");
-			Console.ResetColor();
+			PrintMessage(message, consoleColor);
 		}
 
 		private static bool MatchesLogPatterns(string message)
@@ -153,6 +154,13 @@ namespace ALogViewer
 			return !Regex.IsMatch(lower, "session updated, forcing status update") &&
 				   !Regex.IsMatch(lower, @"\[debug\]\[resonitemodloader\] intercepting call to appdomain\.getassemblies\(\)") &&
 				   !Regex.IsMatch(lower, "rebuild:");
+		}
+		
+		private static void PrintMessage(string message, ConsoleColor color = ConsoleColor.Gray)
+		{
+			Console.ForegroundColor = color;
+			Console.WriteLine(message);
+			Console.ResetColor();
 		}
 	}
 }
