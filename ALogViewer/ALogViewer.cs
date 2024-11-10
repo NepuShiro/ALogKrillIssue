@@ -1,99 +1,123 @@
-using System.IO.Pipes;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace LogViewer
+namespace ALogViewer
 {
-	public class LogViewer
+	public class ALogViewer
 	{
-		private static readonly string pipeName = "LogPipe";
 		private static bool stopping = false;
 		private static ConsoleColor currentColor = ConsoleColor.Gray;
+		private static UdpClient udpClient;
+		private static string lastLogMessage = string.Empty;
+		private static string pattern = @"\d{1,2}:\d{1,2}:\d{1,2}(\s[APap][Mm])?\.\d{1,3}\s+\(\s*-*\d+\s?FPS\s?\)\s";
 
-		static void Main()
+		static void Main(string[] args)
 		{
-			Console.WriteLine("LogViewer started. Press Any Key to exit...");
+			int port = 9999;
+			try
+			{
+				port = args.Length > 0 ? int.Parse(args[0]) : 9999;
+			}
+			catch (Exception e)
+			{
+				Console.WriteLine($"Error parsing Port: {e.Message}");
+				Console.WriteLine($"Using default Port: 9999");
+				port = 9999;
+			}
 
-			Task.Run(() => ReadFromPipeAsync());
+			udpClient = new UdpClient();
+			udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+			udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, port));
+
+			Console.Title = "Resonite Console";
+			Console.WriteLine("LogViewer started. Press Enter to exit...");
+
+			Task.Run(ReceiveLogsAsync);
 
 			Console.ReadLine();
 			stopping = true;
+			udpClient.Dispose();
+			udpClient.Close();
 		}
 
-		private static async Task ReadFromPipeAsync()
+		private static async Task ReceiveLogsAsync()
 		{
 			while (!stopping)
 			{
 				try
 				{
-					using NamedPipeClientStream pipeClient = new(".", pipeName, PipeDirection.In, PipeOptions.Asynchronous);
-					Console.WriteLine("Attempting to connect to named pipe server...");
-					await pipeClient.ConnectAsync(1000);
-					Console.WriteLine("Connected to named pipe server.");
+					UdpReceiveResult result = await udpClient.ReceiveAsync();
+					byte[] receiveBytes = result.Buffer;
+					string receivedMessage = Encoding.UTF8.GetString(receiveBytes);
 
-					using StreamReader reader = new(pipeClient, Encoding.UTF8);
-					while (!stopping)
+					if (!string.IsNullOrWhiteSpace(receivedMessage))
 					{
-						string? response = await reader.ReadLineAsync();
-						if (response == null)
-							break;
-
-						OnLogMessage(response);
+						OnLogMessage(receivedMessage);
+						lastLogMessage = receivedMessage;
 					}
 				}
-				catch (TimeoutException)
+				catch (SocketException ex) when (ex.SocketErrorCode == SocketError.ConnectionReset)
 				{
-					// Console.WriteLine("Connection to named pipe server timed out. Retrying...");
+					string disconnectMessage = "Disconnected from server. Attempting to reconnect...";
+					if (lastLogMessage != disconnectMessage)
+					{
+						Console.WriteLine(disconnectMessage);
+						lastLogMessage = disconnectMessage;
+					}
+					await Task.Delay(1000);
+				}
+				catch (ObjectDisposedException) when (stopping)
+				{
+					break;
 				}
 				catch (Exception ex)
 				{
-					Console.WriteLine($"Error in named pipe client: {ex.Message}");
-				}
-
-				if (!stopping)
-				{
-					await Task.Delay(1000);
+					Console.WriteLine($"Error receiving log entry: {ex.Message}");
 				}
 			}
+		}
+
+		private static bool IsValidText(string message)
+		{
+			foreach (char c in message)
+			{
+				if (c > 127)
+				{
+					return false;
+				}
+			}
+			return true;
 		}
 
 		private static void OnLogMessage(string message)
 		{
-			string cleanedMessage = RemoveTimestampAndFPS(message);
-			
-			if (string.IsNullOrWhiteSpace(cleanedMessage))
+			string cleanedMessage = Regex.Replace(message, pattern, "");
+			bool hasTimestampAndFPS = Regex.IsMatch(message, pattern);
+			if (IsValidText(cleanedMessage))
 			{
-				currentColor = ConsoleColor.Gray;
-				Console.WriteLine();
-				return;
-			}
-
-			if (HasTimestampAndFPS(message))
-			{
-				if (IsValidLog(cleanedMessage) && MatchesLogPatterns(cleanedMessage))
+				if (hasTimestampAndFPS)
 				{
-					FormatModLoaderLog(cleanedMessage);
+					if (IsValidLog(cleanedMessage) && MatchesLogPatterns(cleanedMessage))
+					{
+						FormatModLoaderLog(cleanedMessage);
+					}
+					else if (IsValidLog(cleanedMessage))
+					{
+						Console.ForegroundColor = ConsoleColor.Gray;
+						Console.WriteLine($"{cleanedMessage}");
+						Console.ResetColor();
+					}
 				}
-				else if (IsValidLog(cleanedMessage))
+				else
 				{
-					Console.ForegroundColor = ConsoleColor.Gray;
+					// This is a continuation of the previous message
+					Console.ForegroundColor = currentColor;
 					Console.WriteLine($"{cleanedMessage}");
 					Console.ResetColor();
 				}
 			}
-			else
-			{
-				// This is a continuation of the previous message
-				Console.ForegroundColor = currentColor;
-				Console.WriteLine($"{cleanedMessage}");
-				Console.ResetColor();
-			}
-		}
-
-		private static bool HasTimestampAndFPS(string message)
-		{
-			string pattern = @"\d{1,2}:\d{1,2}:\d{1,2} [APap][Mm]\.\d{1,3}\s+\(\s*-*\d+\s?FPS\s?\)";
-			return Regex.IsMatch(message, pattern);
 		}
 
 		private static void FormatModLoaderLog(string message)
@@ -129,17 +153,6 @@ namespace LogViewer
 			return !Regex.IsMatch(lower, "session updated, forcing status update") &&
 				   !Regex.IsMatch(lower, @"\[debug\]\[resonitemodloader\] intercepting call to appdomain\.getassemblies\(\)") &&
 				   !Regex.IsMatch(lower, "rebuild:");
-		}
-
-		private static string RemoveTimestampAndFPS(string message)
-		{
-			string timestampPattern = @"\d{1,2}:\d{1,2}:\d{1,2} [APap][Mm]\.\d{1,3}\s";
-			string fpsPattern = @"\(\s*-*\d+\s?FPS\s?\)\s+";
-
-			message = Regex.Replace(message, timestampPattern, "");
-			message = Regex.Replace(message, fpsPattern, "");
-
-			return message;
 		}
 	}
 }

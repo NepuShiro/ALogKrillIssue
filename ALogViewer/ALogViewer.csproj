@@ -4,16 +4,12 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(Configuration)' == 'Windows'">
-    <Compile Include="ALogViewer.cs" />
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(Configuration)' == 'Linux'">
-    <Compile Include="ALogViewerLinux.cs" />
-  </ItemGroup>
+  <PropertyGroup>
+    <ApplicationIcon>birdlowres.ico</ApplicationIcon>
+  </PropertyGroup>
 
 </Project>

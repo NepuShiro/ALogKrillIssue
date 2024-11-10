@@ -1,10 +1,10 @@
 ﻿using System;
-using System.IO;
-using System.IO.Pipes;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
-using System.Threading.Tasks;
-using ResoniteModLoader;
 using Elements.Core;
+using ResoniteModLoader;
 
 namespace ALogSender
 {
@@ -12,79 +12,76 @@ namespace ALogSender
 	{
 		public override string Name => "ALogSender";
 		public override string Author => "NepuShiro";
-		public override string Version => "1.5.0";
+		public override string Version => "2.0.0";
 		public override string Link => "https://github.com/NepuShiro/ALogKrillIssue";
+		private static UdpClient udpClient;
+		
+		[AutoRegisterConfigKey]
+		public static readonly ModConfigurationKey<int> PORT = new ModConfigurationKey<int>("Port", "The Port for the udpClient to broadcast on", () => 9999);
 
-		private static readonly string pipeName = "LogPipe";
-		private static NamedPipeServerStream pipeServer;
-		private static StreamWriter writer;
-		private static bool isRunning = true;
+		public static ModConfiguration config;
 
 		public override void OnEngineInit()
 		{
-			Msg("-------------------- OnEngineInit --------------------");
+			config = GetConfiguration();
+			config.Save(true);
 
-			Task.Run(() => StartPipeServer());
+			StartUDPClient();
+			config.OnThisConfigurationChanged += (c) => 
+			{
+				if (c.Key == PORT)
+				{
+					RestartUDPClient();
+				}
+			};
 		}
 
-		private static void StartPipeServer()
+		private static void StartUDPClient()
 		{
 			try
 			{
-				while (isRunning)
+				Msg("UDP Client started. Listening...");
+				udpClient = new UdpClient() 
 				{
-					pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.Out);
+					EnableBroadcast = true,
+				};
+				udpClient.Connect("255.255.255.255", config.GetValue(PORT));
 
-					Msg("Named pipe server started. Waiting for client connection...");
-
-					pipeServer.WaitForConnection();
-
-					Msg("Client connected to named pipe.");
-
-					UniLog.OnLog += WriteToPipe;
-					UniLog.OnWarning += WriteToPipe;
-					UniLog.OnError += WriteToPipe;
-
-					writer = new StreamWriter(pipeServer, Encoding.UTF8) { AutoFlush = true };
-				}
+				UniLog.OnLog += WriteToUDP;
+				UniLog.OnWarning += WriteToUDP;
+				UniLog.OnError += WriteToUDP;
 			}
 			catch (Exception ex)
 			{
-				Error($"Error in named pipe server: {ex.Message}");
+				Error($"Error in UDP Client: {ex.Message}");
+				RestartUDPClient();
 			}
 		}
 
-		private static async void WriteToPipe(string message)
+		private static void WriteToUDP(string message)
 		{
 			try
 			{
-				if (writer != null && pipeServer != null && pipeServer.IsConnected)
-				{
-					writer.WriteLine(message);
-				}
+				byte[] sendBytes = Encoding.UTF8.GetBytes(message);
+				udpClient.Send(sendBytes, sendBytes.Length);
 			}
-			catch (IOException)
+			catch (Exception ex)
 			{
-				isRunning = false;
-				pipeServer.Disconnect();
-
-				UniLog.OnLog -= WriteToPipe;
-				UniLog.OnWarning -= WriteToPipe;
-				UniLog.OnError -= WriteToPipe;
-
-				writer.Flush();
-				writer.Dispose();
-				writer.Close();
-				writer = null;
-
-				pipeServer.WaitForPipeDrain();
-				pipeServer.Dispose();
-				pipeServer.Close();
-				pipeServer = null;
-
-				isRunning = true;
-				await Task.Run(() => StartPipeServer());
+				Error($"Error sending message to UDP Server: {ex.Message}");
+				RestartUDPClient();
 			}
+		}
+		
+		private static void RestartUDPClient()
+		{
+			udpClient.Dispose();
+			udpClient.Close();
+			
+			UniLog.OnLog -= WriteToUDP;
+			UniLog.OnWarning -= WriteToUDP;
+			UniLog.OnError -= WriteToUDP;
+			
+			StartUDPClient();
 		}
 	}
 }

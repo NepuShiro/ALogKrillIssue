@@ -14,20 +14,13 @@
     <CopyToMods Condition="'$(CopyToMods)'==''">true</CopyToMods>
     <DebugSymbols Condition="'$(Configuration)'=='Release'">false</DebugSymbols>
     <DebugType Condition="'$(Configuration)'=='Release'">None</DebugType>
-    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
   </PropertyGroup>
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(CopyToMods)'=='true'">
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="C:\Program Files (x86)\Steam\steamapps\common\Resonite\rml_mods" />
     <Message Text="Copied $(TargetFileName) to C:\Program Files (x86)\Steam\steamapps\common\Resonite\rml_mods" Importance="high" />
   </Target>
-
-  <ItemGroup Condition="'$(Configuration)' == 'Windows'">
-    <Compile Include="ALogSender.cs" />
-  </ItemGroup>
-  <ItemGroup Condition="'$(Configuration)' == 'Linux'">
-    <Compile Include="ALogSenderLinux.cs" />
-  </ItemGroup>
 
   <ItemGroup>
     <Reference Include="Elements.Core">
